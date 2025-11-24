@@ -108,7 +108,11 @@ The application provides a single API route (`/api/messages`) with three HTTP me
 
 ## Testing
 
-**Important**: Consumer groups track which messages have been delivered. Once a message is consumed (via GET), it moves to the Pending Entries List (PEL) and won't appear in subsequent GET requests until acknowledged. Always complete the full flow: POST → GET → DELETE.
+**Important Notes:**
+
+- Consumer groups track which messages have been delivered. Once a message is consumed (via GET), it moves to the Pending Entries List (PEL) and won't appear in subsequent GET requests until acknowledged.
+- The `streamMessageId` returned by GET is Valkey's unique stream entry ID and **must be used** for the DELETE operation.
+- Always complete the full flow: POST → GET → DELETE.
 
 ### Complete Message Flow Example
 
@@ -117,14 +121,18 @@ The application provides a single API route (`/api/messages`) with three HTTP me
 ```bash
 curl -X POST http://localhost:3000/api/messages \
   -H "Content-Type: application/json" \
-  -d '{"name": "John Doe", "email": "john@example.com", "message": "Hello!"}'
+  -d '{
+    "name": "Test User",
+    "email": "test@example.com",
+    "message": "Hello from local dev!"
+  }'
 ```
 
 Response:
 
 ```json
 {
-  "messageId": "fa2382a5-24bf-4070-8a48-1d525e457307",
+  "streamMessageId": "1764009314892-0",
   "timestamp": "2024-11-24T18:35:14.890Z"
 }
 ```
@@ -140,12 +148,12 @@ Response with message:
 ```json
 {
   "message": {
-    "streamMessageId": "1732471514890-0",
-    "id": "fa2382a5-24bf-4070-8a48-1d525e457307",
-    "name": "John Doe",
-    "email": "john@example.com",
-    "message": "Hello!",
-    "timestamp": "2024-11-24T18:35:14.890Z"
+    "streamMessageId": "1764009314892-0",
+    "name": "Test User",
+    "email": "test@example.com",
+    "message": "Hello from local dev!",
+    "timestamp": "2024-11-24T18:35:14.890Z",
+    "claimed": true
   }
 }
 ```
@@ -156,12 +164,14 @@ Response when queue is empty:
 { "message": null }
 ```
 
+**Note**: The `claimed` field indicates whether this message was recovered from the Pending Entries List (a previously delivered but unacknowledged message). Messages idle for more than 60 seconds are automatically reclaimed.
+
 **3. Acknowledge Message (Mark as Processed)**
 
-Use the `streamMessageId` from step 2:
+**Critical**: Use the `streamMessageId` from step 2 for the DELETE operation:
 
 ```bash
-curl -X DELETE "http://localhost:3000/api/messages?messageId=1732471514890-0"
+curl -X DELETE "http://localhost:3000/api/messages?messageId=1764009314892-0"
 ```
 
 Response:
@@ -172,14 +182,32 @@ Response:
 
 ### Troubleshooting
 
-If you GET a message but don't DELETE (acknowledge) it, the message stays in the Pending Entries List. Subsequent GET requests will return `{"message":null}` because the consumer group only delivers new, undelivered messages. To reset for testing:
+**Message Recovery**: If you GET a message but don't DELETE (acknowledge) it, the message stays in the Pending Entries List. After 60 seconds of idle time, subsequent GET requests will **automatically reclaim** that message (indicated by `"claimed": true` in the response). This is a reliability feature that handles consumer failures.
+
+**For clean testing**, if you want to reset and start fresh:
 
 ```bash
 # Access your Valkey instance
 docker exec -it <container_id> valkey-cli
 
-# Delete the consumer group to reset
+# Delete the entire stream (removes consumer group too)
+DEL contact-messages
+
+# Or just delete the consumer group
 XGROUP DESTROY contact-messages contact-processors
 
 # The consumer group will be recreated automatically on next GET
+```
+
+**Checking Pending Messages**: To see what's currently in the Pending Entries List:
+
+```bash
+# Access Valkey
+docker exec -it <container_id> valkey-cli
+
+# View pending messages
+XPENDING contact-messages contact-processors
+
+# View all messages in the stream
+XRANGE contact-messages - +
 ```
