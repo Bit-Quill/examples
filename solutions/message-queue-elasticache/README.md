@@ -98,34 +98,88 @@ This template demonstrates a reliable serverless message queue workflow:
 
 ## API Endpoints
 
-The application provides three API routes demonstrating the message queue pattern:
+The application provides a single API route (`/api/messages`) with three HTTP methods demonstrating the message queue pattern:
 
 ### Message Operations
 
-- `POST /api/messages/produce` - Add a new message to the queue (contact form submission)
-- `GET /api/messages/consume` - Read the next unprocessed message from the consumer group
-- `POST /api/messages/acknowledge` - Acknowledge and remove a message from the pending list
+- `POST /api/messages` - Add a new message to the queue (contact form submission)
+- `GET /api/messages` - Read the next unprocessed message from the consumer group
+- `DELETE /api/messages?messageId=<id>` - Acknowledge and remove a message from the pending list
 
 ## Testing
 
-### Produce Message (Contact Form Submission)
+**Important**: Consumer groups track which messages have been delivered. Once a message is consumed (via GET), it moves to the Pending Entries List (PEL) and won't appear in subsequent GET requests until acknowledged. Always complete the full flow: POST → GET → DELETE.
+
+### Complete Message Flow Example
+
+**1. Produce Message (Add to Queue)**
 
 ```bash
-curl -X POST http://localhost:3000/api/messages/produce \
-  -d '{"name": "John Doe", "email": "john@example.com", "message": "Hello!"}' \
-  -H "Content-type: application/json"
+curl -X POST http://localhost:3000/api/messages \
+  -H "Content-Type: application/json" \
+  -d '{"name": "John Doe", "email": "john@example.com", "message": "Hello!"}'
 ```
 
-### Consume Message (Get Next Pending)
+Response:
 
-```bash
-curl http://localhost:3000/api/messages/consume
+```json
+{
+  "messageId": "fa2382a5-24bf-4070-8a48-1d525e457307",
+  "timestamp": "2024-11-24T18:35:14.890Z"
+}
 ```
 
-### Acknowledge Message (Mark as Processed)
+**2. Consume Message (Read from Queue)**
 
 ```bash
-curl -X POST http://localhost:3000/api/messages/acknowledge \
-  -d '{"messageId": "1234567890123-0"}' \
-  -H "Content-type: application/json"
+curl http://localhost:3000/api/messages
+```
+
+Response with message:
+
+```json
+{
+  "message": {
+    "streamMessageId": "1732471514890-0",
+    "id": "fa2382a5-24bf-4070-8a48-1d525e457307",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "message": "Hello!",
+    "timestamp": "2024-11-24T18:35:14.890Z"
+  }
+}
+```
+
+Response when queue is empty:
+
+```json
+{ "message": null }
+```
+
+**3. Acknowledge Message (Mark as Processed)**
+
+Use the `streamMessageId` from step 2:
+
+```bash
+curl -X DELETE "http://localhost:3000/api/messages?messageId=1732471514890-0"
+```
+
+Response:
+
+```json
+{ "success": true }
+```
+
+### Troubleshooting
+
+If you GET a message but don't DELETE (acknowledge) it, the message stays in the Pending Entries List. Subsequent GET requests will return `{"message":null}` because the consumer group only delivers new, undelivered messages. To reset for testing:
+
+```bash
+# Access your Valkey instance
+docker exec -it <container_id> valkey-cli
+
+# Delete the consumer group to reset
+XGROUP DESTROY contact-messages contact-processors
+
+# The consumer group will be recreated automatically on next GET
 ```
