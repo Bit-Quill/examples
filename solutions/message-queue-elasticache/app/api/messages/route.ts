@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { GlideClient, GlideClientConfiguration } from '@valkey/valkey-glide'
 import { randomUUID } from 'crypto'
+import { stringify } from 'querystring'
 
 // Force Node.js runtime for native modules
 export const runtime = 'nodejs'
@@ -167,7 +168,7 @@ export async function GET() {
 
     /**
      * XAUTOCLAIM automatically reclaims messages that
-     * have not been acknowledged, 5 seconds paramter tells
+     * have not been acknowledged, 60 seconds paramter tells
      * the backend to reclaim aby messages that have not
      * been consumed for more than this time.
      * See more {@link https://valkey.io/commands/xautoclaim/}
@@ -177,7 +178,7 @@ export async function GET() {
       STREAM_NAME,
       CONSUMER_GROUP,
       consumerName,
-      '5000',
+      '60000',
       '0-0',
       'COUNT',
       '1',
@@ -244,25 +245,25 @@ export async function GET() {
     }
 
     // getting the head, since XREADGROUP supports reading from multiple streams at the same time
-    const streamData = response[0] as any[]
-    if (!streamData || streamData.length < 2) {
-      return NextResponse.json({ message: null }, { status: 200 })
-    }
+    const streamData = response[0] as { key: string; value: any[] }
+    const messages = streamData.value
 
-    // streamData[0] - stream name
-    // streamData[1] - stream messages
-    const messages = streamData[1] as any[]
     if (!messages || messages.length === 0) {
       return NextResponse.json({ message: null }, { status: 200 })
     }
 
-    // messages[0] - first message in the stream
-    const [streamMessageId, fields] = messages[0] as [string, string[]]
+    const messageObj = messages[0] as {
+      key: string
+      value: Array<[string, string]>
+    }
 
-    // Parse fields array into object
+    const streamMessageId = messageObj.key
+    const fieldsArray = messageObj.value
+
+    // Convert array of pairs to Record
     const messageData: Record<string, string> = {}
-    for (let i = 0; i < fields.length; i += 2) {
-      messageData[fields[i]] = fields[i + 1]
+    for (const [field, value] of fieldsArray) {
+      messageData[field] = value
     }
 
     return NextResponse.json(
