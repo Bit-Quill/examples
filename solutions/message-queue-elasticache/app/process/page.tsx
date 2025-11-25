@@ -159,7 +159,7 @@ export default function ProcessPage() {
                 fontSize: '14px',
               }}
             >
-              ⚠️ This message was recovered from pending list (idle &gt; 60s)
+              ⚠️ This message was recovered from pending list (idle &gt; 5s)
             </div>
           )}
 

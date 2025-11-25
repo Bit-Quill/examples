@@ -180,6 +180,35 @@ Response:
 { "success": true }
 ```
 
+### User Interface Flow
+
+This template consists of two UI views that demonstrate the complete message queue workflow:
+
+#### Submitting Messages (`/`)
+
+The home page features a contact form where visitors can submit their name, email, and message. Upon submission, the message is immediately added to the Valkey stream and a confirmation is displayed.
+
+![Message Submission Form](./images/message-submission.png)
+
+#### Processing Messages (``)
+
+The processing view allows reviewers to consume and acknowledge messages from the queue. The page loads the messages on page load and displays:
+
+- Message details (name, email, message content)
+- Timestamp when the message was submitted
+- A warning banner if the message was recovered from the pending entries list
+
+![Displayed Message](./images/message-view.png)
+
+Clicking **Acknowledge** confirms the message and removes it from the queue. A success
+message appears with a **Next Message** button to load the next message in the queue.
+
+![Message Acknowledgement](./images/next-message.png)
+
+When the queue is empty, a "No message to process" indicator appears.
+
+![Empty Mailbox](./images/empty-mailbox.png)
+
 ### Troubleshooting
 
 **Message Recovery**: If you GET a message but don't DELETE (acknowledge) it, the message stays in the Pending Entries List. After 60 seconds of idle time, subsequent GET requests will **automatically reclaim** that message (indicated by `"claimed": true` in the response). This is a reliability feature that handles consumer failures.
