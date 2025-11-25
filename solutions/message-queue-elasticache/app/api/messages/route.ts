@@ -38,13 +38,7 @@ async function getClient(): Promise<GlideClient> {
   return client
 }
 
-let consumerGroupEnsured = false
-
 async function ensureConsumerGroup(client: GlideClient): Promise<void> {
-  if (consumerGroupEnsured) {
-    return
-  }
-
   try {
     /**
      * Try to create the consumer group
@@ -64,9 +58,6 @@ async function ensureConsumerGroup(client: GlideClient): Promise<void> {
     if (!error?.message?.includes('BUSYGROUP')) {
       throw error
     }
-  } finally {
-    // memoize
-    consumerGroupEnsured = true
   }
 }
 
@@ -176,7 +167,7 @@ export async function GET() {
 
     /**
      * XAUTOCLAIM automatically reclaims messages that
-     * have not been acknowledged, 60 seconds paramter tells
+     * have not been acknowledged, 5 seconds paramter tells
      * the backend to reclaim aby messages that have not
      * been consumed for more than this time.
      * See more {@link https://valkey.io/commands/xautoclaim/}
@@ -186,7 +177,7 @@ export async function GET() {
       STREAM_NAME,
       CONSUMER_GROUP,
       consumerName,
-      '60000',
+      '5000',
       '0-0',
       'COUNT',
       '1',
